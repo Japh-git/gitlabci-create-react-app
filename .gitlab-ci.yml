@@ -1,0 +1,43 @@
+image: node:13.12.0-alpine
+
+variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_HOST: "tcp://192.168.86.11:2376"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "certs"
+
+stages: 
+    - build
+    - deploy
+
+build:
+   image: docker:stable
+   stage: build
+   services:
+    - docker:18.09.3-dind
+   before_script:
+       - mkdir $DOCKER_CERT_PATH
+       - echo "$CA" > $DOCKER_CERT_PATH/ca.pem
+       - echo "$DEV_CERT" > $DOCKER_CERT_PATH/cert.pem
+       - echo "$DEV_KEY" > $DOCKER_CERT_PATH/key.pem
+       - export COMMIT=${CI_COMMIT_SHA:0:8}
+       - echo $COMMIT
+   script:
+        - docker build -t react:$COMMIT .
+
+deploy:
+   image: docker:stable
+   stage: deploy
+   services:
+    - docker:18.09.3-dind
+   before_script:
+      - mkdir $DOCKER_CERT_PATH
+      - echo "$CA" > $DOCKER_CERT_PATH/ca.pem
+      - echo "$DEV_CERT" > $DOCKER_CERT_PATH/cert.pem
+      - echo "$DEV_KEY" > $DOCKER_CERT_PATH/key.pem
+      - export COMMIT=${CI_COMMIT_SHA:0:8}
+   script:
+      - docker ps | grep "react-app" || exit_code=$?
+      - if [ $exit_code -ne 0 ]; then docker run -d --name react-app -p 8686:80 react:$COMMIT; else docker rm -f $(docker ps | grep "react-app" | docker ps -q) && docker run -d --name react-app -p 8686:80 react:$COMMIT; fi;
+
+
